@@ -26,26 +26,6 @@ def get_models(server, model_type='llm'):
             models.append(model)
     return response.status_code, models
 
-def get_models_dict(server,model_type='llm'):
-    accepted_model_type = ['llm','vlm','embedding','decision']
-    if model_type == 'all':
-        pass
-    elif model_type in accepted_model_type:
-        accepted_model_type = [model_type]
-    else:
-        return 22, None
-        
-    response = requests.get(server+"/api/v1/models")
-    models = {}
-    if response.status_code != 200:
-        return response.status_code, None
-    
-    rawdata = response.json()
-    for model in rawdata['models']:
-        if model['type'] in accepted_model_type:
-            models[model['key']]=model['display_name']
-    return response.status_code, models
-
 def load(model_key):
     body = {
         "model": model_key
@@ -67,10 +47,10 @@ def unload(instance):
 
 def get_instances(model_key='all'):
     instances = {}
-    status, models_dict = get_models_dict(server,model_type='all') #gets every model as a dict key:name and only keeps the key
+    status, models = get_models(server,model_type='all')
     if status != 200:
         return status, None
-    keys = list(models_dict.keys())
+    keys = [model['key'] for model in models]
     if model_key == 'all': 
         pass
     elif model_key in keys:
@@ -78,12 +58,8 @@ def get_instances(model_key='all'):
     else:
         return 22, None
 
-    status, models = get_models(server, model_type='all')
-    if status != 200:
-        return status, None
-    for key in keys:
-        for model in models:
-            if model['key'] == key:
-                instances[key] = model['loaded_instances']
+    for model in models:
+        if model['key'] in keys:
+            instances[model['key']] = model['loaded_instances']
 
     return 200, instances
