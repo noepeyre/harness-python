@@ -1,6 +1,9 @@
 import requests
+address = "127.0.0.1"
+port = 1234
+server = f"http://{address}:{port}"
 
-def get_models(model_type='llm'):
+def get_models(server, model_type='llm'):
     accepted_model_type = ['llm','vlm','embedding','decision']
     if model_type == 'all':
         pass
@@ -9,18 +12,19 @@ def get_models(model_type='llm'):
     else:
         return 22, None
         
-    response = requests.get("http://127.0.0.1:1234/api/v1/models")
+    response = requests.get(server+"/api/v1/models")
     models = []
     if response.status_code != 200:
         return response.status_code, None
     
     rawdata = response.json()
+    print(rawdata)
     for model in rawdata['models']:
         if model['type'] in accepted_model_type:
             models.append(model)
     return response.status_code, models
 
-def get_models_dict(model_type='llm'):
+def get_models_dict(server,model_type='llm'):
     accepted_model_type = ['llm','vlm','embedding','decision']
     if model_type == 'all':
         pass
@@ -29,7 +33,7 @@ def get_models_dict(model_type='llm'):
     else:
         return 22, None
         
-    response = requests.get("http://127.0.0.1:1234/api/v1/models")
+    response = requests.get(server+"/api/v1/models")
     models = {}
     if response.status_code != 200:
         return response.status_code, None
@@ -44,7 +48,7 @@ def load(model):
     body = {
         "model": model
     }
-    response = requests.post("http://localhost:1234/api/v1/models/load",json=body)
+    response = requests.post(server+"/api/v1/models/load",json=body)
     if response.status_code == 200:
         return response.status_code, response.json()
     else:
@@ -53,7 +57,7 @@ def unload(instance):
     body = {
         "instance_id": instance
     }
-    response = requests.post("http://localhost:1234/api/v1/models/unload",json=body)
+    response = requests.post(server+"/api/v1/models/unload",json=body)
     if response.status_code == 200:
         return response.status_code, response.json()
     else:
