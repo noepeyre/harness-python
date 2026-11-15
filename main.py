@@ -66,22 +66,24 @@ def unload(instance):
         return response.status_code, None
 
 def get_instances(model_key='all'):
-    instances = []
-    status, models_dict = get_models_dict(model_type='all') #gets every model as a dict key:name and only keeps the key
-    keys = models_dict.keys()
-
+    instances = {}
+    status, models_dict = get_models_dict(server,model_type='all') #gets every model as a dict key:name and only keeps the key
     if status != 200:
         return status, None
+    keys = list(models_dict.keys())
     if model_key == 'all': 
         pass
     elif model_key in keys:
-        keys = model_key
+        keys = [model_key]
     else:
         return 22, None
 
-    models = get_models(server, model_type='all')
+    status, models = get_models(server, model_type='all')
+    if status != 200:
+        return status, None
     for key in keys:
         for model in models:
             if model['key'] == key:
-                for instance in model['instances']:
-                    instances.append(instance)
+                instances[key] = model['loaded_instances']
+
+    return 200, instances
