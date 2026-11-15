@@ -1,5 +1,7 @@
 import requests
-address = "127.0.0.1"
+address = input("Enter the server address: ")
+if address == "":
+    address = "127.0.0.1"
 port = 1234
 server = f"http://{address}:{port}"
 
@@ -44,9 +46,9 @@ def get_models_dict(server,model_type='llm'):
             models[model['key']]=model['display_name']
     return response.status_code, models
 
-def load(model):
+def load(model_key):
     body = {
-        "model": model
+        "model": model_key
     }
     response = requests.post(server+"/api/v1/models/load",json=body)
     if response.status_code == 200:
@@ -63,16 +65,31 @@ def unload(instance):
     else:
         return response.status_code, None
 
-def get_instances(model='all'):
+def get_instances(model_key='all'):
+    instances = []
     status, models_dict = get_models_dict(model_type='all') #gets every model as a dict key:name and only keeps the key
     keys = models_dict.keys()
 
     if status != 200:
         return status, None
-    if model == 'all': 
+    if model_key == 'all': 
         pass
-    elif model in keys:
-        keys = model
+    elif model_key in keys:
+        keys = model_key
     else:
         return 22, None
-    #here i want to return the list instances of each model of the list keys
+
+    for key in keys:
+        model = get_model_info(key)
+        if model['key'] == key:
+            for instance in model['instances']:
+                instances.append(instance)
+
+
+def get_model_info(model_key):
+    status, models = get_models(server, model_type='all')
+    if status != 200:
+        return status, None
+    for model in models:
+        if model_key == model['key']:
+            return 200, model
