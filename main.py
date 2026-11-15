@@ -1,10 +1,4 @@
 import requests
-address = input("Enter the server address: ")
-if address == "":
-    address = "127.0.0.1"
-port = 1234
-server = f"http://{address}:{port}"
-
 def get_models(server, model_type='llm'):
     accepted_model_type = ['llm','vlm','embedding','decision']
     if model_type == 'all':
@@ -63,3 +57,23 @@ def get_instances(model_key='all'):
             instances[model['key']] = model['loaded_instances']
 
     return 200, instances
+
+def command(command):
+    if command == "exit":
+        exit()
+    print("=>",command)
+
+address = input("Enter the server address: ")
+if address == "localhost":
+    address = "127.0.0.1"
+if address == "":
+    address = "127.0.0.1"
+port = 1234
+server = f"http://{address}:{port}"
+models = get_models(server)
+
+while True:
+    user_input = input("> ")
+    if user_input.startswith("/"):
+        user_input = user_input.removeprefix("/")
+        command(user_input)
