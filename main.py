@@ -79,17 +79,9 @@ def get_instances(model_key='all'):
     else:
         return 22, None
 
+    models = get_models(server, model_type='all')
     for key in keys:
-        model = get_model_info(key)
-        if model['key'] == key:
-            for instance in model['instances']:
-                instances.append(instance)
-
-
-def get_model_info(model_key):
-    status, models = get_models(server, model_type='all')
-    if status != 200:
-        return status, None
-    for model in models:
-        if model_key == model['key']:
-            return 200, model
+        for model in models:
+            if model['key'] == key:
+                for instance in model['instances']:
+                    instances.append(instance)
