@@ -1,4 +1,6 @@
 import requests
+import time
+
 def get_models(server, model_type='llm'):
     accepted_model_type = ['llm','vlm','embedding','decision']
     if model_type == 'all':
@@ -61,7 +63,11 @@ def get_instances(model_key='all'):
 def command(command):
     if command == "exit":
         exit()
-    print("=>",command)
+    elif command == "autre":
+        pass
+        #command
+    else:
+        print("Unknown command:",command)
 
 address = input("Enter the server address: ")
 if address == "localhost":
@@ -72,8 +78,37 @@ port = 1234
 server = f"http://{address}:{port}"
 models = get_models(server)
 
+context = [{"role": "system", "content": "answer without markdown, in the user first message's language"}]
+history = []
+for model in models:
+    print(f"{model['display_name']}: {model['key']}")
+choice = input("What model to use? :")
+load(server, choice)
+
 while True:
     user_input = input("> ")
     if user_input.startswith("/"):
         user_input = user_input.removeprefix("/")
         command(user_input)
+    else:
+            context.append({"role": "user", "content": user_input})
+            body = {
+                "model": choice,
+                "messages": context
+            }
+            created = time.time()
+            response = requests.post("http://localhost:1234/v1/chat/completions", json=body)
+            received = time.time()
+            if response.status_code==200:
+                rawdata = response.json()
+                history.append(rawdata)
+                answer = rawdata["choices"][0]["message"]["content"]
+                print(answer)
+                context.append({"role": "assistant", "content": answer})
+                dt = received - created
+                tok = rawdata["usage"]["total_tokens"]
+                toks = tok / dt
+                print(f"~ {round(dt, 2)}s - {round(toks)}tok/s")
+            else:
+                print("ERROR",response.status_code)
+    
