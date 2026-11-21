@@ -1,5 +1,8 @@
 import requests
 import time
+import shutil
+
+window = shutil.get_terminal_size()
 
 def get_models(server, model_type='llm'):
     accepted_model_type = ['llm','vlm','embedding','decision']
@@ -16,22 +19,21 @@ def get_models(server, model_type='llm'):
         return response.status_code, None
     
     rawdata = response.json()
-    print(rawdata)
     for model in rawdata['models']:
         if model['type'] in accepted_model_type:
             models.append(model)
     return response.status_code, models
 
-def load(model_key):
+def load(server, model_key):
     body = {
         "model": model_key
     }
     response = requests.post(server+"/api/v1/models/load",json=body)
-    if response.status_code == 200:
-        return response.status_code, response.json()
-    else:
+    if response.status_code != 200:
         return response.status_code, None
-def unload(instance):
+    return response.status_code, response.json()
+        
+def unload(server, instance):
     body = {
         "instance_id": instance
     }
@@ -41,7 +43,7 @@ def unload(instance):
     else:
         return response.status_code, None
 
-def get_instances(model_key='all'):
+def get_instances(server,model_key='all'):
     instances = {}
     status, models = get_models(server,model_type='all')
     if status != 200:
@@ -60,55 +62,96 @@ def get_instances(model_key='all'):
 
     return 200, instances
 
-def command(command):
-    if command == "exit":
+def command(text):
+    if text == "exit":
         exit()
-    elif command == "autre":
-        pass
-        #command
+    elif "unload" in text:
+        status, models = get_instances(server)
+        for model in models.values():
+            for instance in model:
+                unload(server, instance)
+    elif "load" in text:
+        model = text[5:]
+        load(server,model)
+
     else:
-        print("Unknown command:",command)
+        print("Unknown command:",text)
+
+def model_selector(models):
+    output = ["_"*window.columns]
+    for model in models:
+        output.append(f"- {model['display_name']}: {model['key']}")
+    output.append("_"*window.columns)
+    return output
 
 address = input("Enter the server address: ")
 if address == "localhost":
     address = "127.0.0.1"
 if address == "":
-    address = "127.0.0.1"
+    address = "192.168.1.20"
 port = 1234
 server = f"http://{address}:{port}"
-models = get_models(server)
 
-context = [{"role": "system", "content": "answer without markdown, in the user first message's language"}]
-history = []
-for model in models:
-    print(f"{model['display_name']}: {model['key']}")
-choice = input("What model to use? :")
-load(server, choice)
+status, models = get_models(server)
+if status != 200:
+    print(f"Failed to reach server: {status}")
+    exit(1)
+buffer = model_selector(models)
+for line in buffer:
+    print(line)
+model = input("MODEL> ")
+status, response = load(server, model)
+if status != 200:
+    print(f"Failed to load model: {status}")
+    exit(1)
+print(f"{model} loaded in {response['load_time_seconds']}s.")
 
+previous_response_id = None
 while True:
+    answer = None
     user_input = input("> ")
     if user_input.startswith("/"):
         user_input = user_input.removeprefix("/")
         command(user_input)
     else:
-            context.append({"role": "user", "content": user_input})
-            body = {
-                "model": choice,
-                "messages": context
-            }
-            created = time.time()
-            response = requests.post("http://localhost:1234/v1/chat/completions", json=body)
-            received = time.time()
-            if response.status_code==200:
-                rawdata = response.json()
-                history.append(rawdata)
-                answer = rawdata["choices"][0]["message"]["content"]
-                print(answer)
-                context.append({"role": "assistant", "content": answer})
-                dt = received - created
-                tok = rawdata["usage"]["total_tokens"]
-                toks = tok / dt
-                print(f"~ {round(dt, 2)}s - {round(toks)}tok/s")
-            else:
-                print("ERROR",response.status_code)
+
+        body = {
+            "model": model,
+            "input": user_input,
+            "system_prompt": "answer without markdown, in the user's language"
+        }
+        if previous_response_id is not None:
+            body["previous_response_id"] = previous_response_id
+
+        created = time.time()
+        response = requests.post(server+"/api/v1/chat", json=body)
+        received = time.time()
+        if response.status_code==200:
+            rawdata = response.json()
+            for item in rawdata["output"]:
+                if item['type']== "message":
+                    answer = item['content']
+            print(answer)
+            dt = received - created
+            toks = rawdata['stats']['tokens_per_second']
+            print(f"~ {round(dt, 2)}s - {round(toks,2)}tok/s")
+            print("_"*window.columns)
+            previous_response_id = rawdata["response_id"]
+        else:
+            print("ERROR",response.status_code)
     
+example = {
+    'model_instance_id': 'google/gemma-4-e4b',
+    'output': [
+        {'type': 'reasoning', 'content': 'The user said "bonjour" (hello/good day) in French. I should respond with a friendly greeting and ask how they are or what they need in French.'},
+        {'type': 'message', 'content': "Bonjour ! Comment puis-je vous aider aujourd'hui ?"}
+    ],
+    'stats': {
+        'input_tokens': 28,
+        'total_output_tokens': 52,
+        'reasoning_output_tokens': 35,
+        'tokens_per_second': 115.87195921307035, 
+        'time_to_first_token_seconds': 0.068336
+        },
+    'response_id': 'resp_d18eb00bcddc0c84dcd342ed447dc5950f306dfda81a1569'
+}
