@@ -62,27 +62,106 @@ def get_instances(server,model_key='all'):
 
     return 200, instances
 
-def command(text):
-    if text == "exit":
-        exit()
-    elif "unload" in text:
-        status, models = get_instances(server)
-        for model in models.values():
-            for instance in model:
-                unload(server, instance)
-    elif "load" in text:
-        model = text[5:]
-        load(server,model)
-
-    else:
-        print("Unknown command:",text)
-
 def model_selector(models):
     output = ["_"*window.columns]
     for model in models:
         output.append(f"- {model['display_name']}: {model['key']}")
     output.append("_"*window.columns)
     return output
+
+def command(text):
+    global previous_response_id, currentmodel, context
+    text = text.split()
+    status, models = get_instances(server)
+    instances = []
+    for model in models.values():
+        for instance in model:
+            instances.append(instance)
+
+    if text == []:
+        text = [""]
+
+    if text == ["exit"]:
+        for instance in instances:
+            unload(server, instance)
+        exit()
+
+    elif text[0] == "unload":
+        for key in text[1:]:
+            if key not in models:
+                print(key,"model not found")
+            else:
+                if not models[key]:
+                    print(key, "is not loaded")
+                else:
+                    for instance in models[key]:
+                        unload(server, instance["id"])
+
+    elif text[0] == "load":
+        for key in text[1:]:
+            if key not in models:
+                print(key,"model not found")
+            else:
+                load(server, key)
+
+    elif text[0] == "model":
+        key = text[1]
+        if key not in models:
+            print(key,"model not found")
+        else:
+            if not models[key]:
+                print(key, "is not loaded")
+                choice = input("> Load the model(Y/n)? :")
+                if choice.lower() in ["y", "yes", ""]:
+                    load(server, key)
+                else:
+                    return
+            currentmodel = key
+
+    elif text == ["new"]:
+        previous_response_id = None
+        context.clear()
+
+    elif text == ["retry"]:
+        if len(context)==0:
+            print("You didn't send any messages yet")
+        else:
+            body = {
+                "model": currentmodel,
+                "input": context[-1]["input"],
+                "system_prompt": "answer without markdown, in the user's language",
+                "previous_response_id": context[-1]["parent_id"],
+            }
+            status, data = chat(body)
+            if status == 200:
+                context[-1]={
+                    "input": context[-1]["input"],
+                    "parent_id":context[-1]["parent_id"],
+                    "response_id":data["response_id"]
+                }
+                previous_response_id = data["response_id"]
+            else:
+                print("ERROR",status)
+
+    else:
+        print(f"Unknown command:'{text[0]}'")
+
+def chat(body):
+    created = time.time()
+    response = requests.post(server+"/api/v1/chat", json=body)
+    received = time.time()
+    if response.status_code==200:
+        rawdata = response.json()
+        rawdata['stats']['dt'] = received - created
+        for item in rawdata["output"]:
+            if item['type']== "message":
+                answer = item['content']
+        print(answer)
+        print(f"~ {round(rawdata['stats']['dt'], 2)}s - {round(rawdata['stats']['tokens_per_second'],2)}tok/s")
+        print("_"*window.columns)
+        return response.status_code, rawdata
+    else:
+        return response.status_code, None
 
 address = input("Enter the server address: ")
 if address == "localhost":
@@ -99,14 +178,15 @@ if status != 200:
 buffer = model_selector(models)
 for line in buffer:
     print(line)
-model = input("MODEL> ")
-status, response = load(server, model)
+currentmodel = input("MODEL> ")
+status, response = load(server, currentmodel)
 if status != 200:
     print(f"Failed to load model: {status}")
     exit(1)
-print(f"{model} loaded in {response['load_time_seconds']}s.")
+print(f"{currentmodel} loaded in {response['load_time_seconds']}s.")
 
 previous_response_id = None
+context = []
 while True:
     answer = None
     user_input = input("> ")
@@ -114,32 +194,27 @@ while True:
         user_input = user_input.removeprefix("/")
         command(user_input)
     else:
-
         body = {
-            "model": model,
+            "model": currentmodel,
             "input": user_input,
             "system_prompt": "answer without markdown, in the user's language"
         }
         if previous_response_id is not None:
             body["previous_response_id"] = previous_response_id
 
-        created = time.time()
-        response = requests.post(server+"/api/v1/chat", json=body)
-        received = time.time()
-        if response.status_code==200:
-            rawdata = response.json()
-            for item in rawdata["output"]:
-                if item['type']== "message":
-                    answer = item['content']
-            print(answer)
-            dt = received - created
-            toks = rawdata['stats']['tokens_per_second']
-            print(f"~ {round(dt, 2)}s - {round(toks,2)}tok/s")
-            print("_"*window.columns)
-            previous_response_id = rawdata["response_id"]
+        status, data = chat(body)
+        if status == 200:
+            context.append({
+                "input":user_input,
+                "parent_id":previous_response_id,
+                "response_id":data["response_id"]
+            })
+            previous_response_id = data["response_id"]
         else:
-            print("ERROR",response.status_code)
-    
+            print("ERROR",status)
+
+        
+
 example = {
     'model_instance_id': 'google/gemma-4-e4b',
     'output': [
