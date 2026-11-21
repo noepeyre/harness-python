@@ -72,21 +72,25 @@ def model_selector(models):
 def command(text):
     global previous_response_id, currentmodel, context
     text = text.split()
-    status, models = get_instances(server)
-    instances = []
-    for model in models.values():
-        for instance in model:
-            instances.append(instance)
-
+    
     if text == []:
         text = [""]
 
     if text == ["exit"]:
-        for instance in instances:
-            unload(server, instance)
+        status, models = get_instances(server)
+        if status != 200:
+            print("Failed to retrieve models:", status)
+            return
+        for model in models.values():
+            for instance in model:
+                unload(server, instance)
         exit()
 
     elif text[0] == "unload":
+        status, models = get_instances(server)
+        if status != 200:
+            print("Failed to retrieve models:", status)
+            return
         for key in text[1:]:
             if key not in models:
                 print(key,"model not found")
@@ -98,6 +102,10 @@ def command(text):
                         unload(server, instance["id"])
 
     elif text[0] == "load":
+        status, models = get_instances(server)
+        if status != 200:
+            print("Failed to retrieve models:", status)
+            return
         for key in text[1:]:
             if key not in models:
                 print(key,"model not found")
@@ -105,6 +113,13 @@ def command(text):
                 load(server, key)
 
     elif text[0] == "model":
+        if len(text) < 2:
+            print("No model specified.")
+            return
+        status, models = get_instances(server)
+        if status != 200:
+            print("Failed to retrieve models:", status)
+            return
         key = text[1]
         if key not in models:
             print(key,"model not found")
@@ -122,31 +137,46 @@ def command(text):
         previous_response_id = None
         context.clear()
 
-    elif text == ["retry"]:
+    elif text[0] == "retry":
         if len(context)==0:
             print("You didn't send any messages yet")
+            return
+        if len(text) == 1:
+            index = len(context) - 1
         else:
+            try:
+                index = int(text[1])
+            except ValueError:
+                print("Invalid id:", text[1])
+                return
+            
+        if 0 <= index < len(context):
             body = {
                 "model": currentmodel,
-                "input": context[-1]["input"],
+                "input": context[index]["input"],
                 "system_prompt": "answer without markdown, in the user's language",
-                "previous_response_id": context[-1]["parent_id"],
+                "previous_response_id": context[index]["parent_id"],
             }
             status, data = chat(body)
             if status == 200:
-                context[-1]={
-                    "input": context[-1]["input"],
-                    "parent_id":context[-1]["parent_id"],
+                context[index]={
+                    "input": context[index]["input"],
+                    "parent_id":context[index]["parent_id"],
                     "response_id":data["response_id"]
                 }
                 previous_response_id = data["response_id"]
+                del context[index+1:]
             else:
                 print("ERROR",status)
-
+        else:
+            print("Message with id",index,"not found.")
+        
     else:
         print(f"Unknown command:'{text[0]}'")
 
 def chat(body):
+    global context
+    answer = ""
     created = time.time()
     response = requests.post(server+"/api/v1/chat", json=body)
     received = time.time()
@@ -157,7 +187,7 @@ def chat(body):
             if item['type']== "message":
                 answer = item['content']
         print(answer)
-        print(f"~ {round(rawdata['stats']['dt'], 2)}s - {round(rawdata['stats']['tokens_per_second'],2)}tok/s")
+        print(f"{len(context)}~ {round(rawdata['stats']['dt'], 2)}s - {round(rawdata['stats']['tokens_per_second'],2)}tok/s")
         print("_"*window.columns)
         return response.status_code, rawdata
     else:
@@ -188,7 +218,6 @@ print(f"{currentmodel} loaded in {response['load_time_seconds']}s.")
 previous_response_id = None
 context = []
 while True:
-    answer = None
     user_input = input("> ")
     if user_input.startswith("/"):
         user_input = user_input.removeprefix("/")
