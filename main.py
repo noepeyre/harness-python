@@ -64,6 +64,7 @@ def get_instances(server,model_key='all'):
 
 def model_selector(models):
     output = ["_"*window.columns]
+    output.append("")
     for model in models:
         output.append(f"- {model['display_name']}: {model['key']}")
     output.append("_"*window.columns)
@@ -83,7 +84,7 @@ def command(text):
             return
         for model in models.values():
             for instance in model:
-                unload(server, instance)
+                unload(server, instance["id"])
         exit()
 
     elif text[0] == "unload":
@@ -170,7 +171,16 @@ def command(text):
                 print("ERROR",status)
         else:
             print("Message with id",index,"not found.")
-        
+    elif text == ["help"]:
+        print("_"*window.columns)
+        print("")
+        print("/model [model_key] : choose what model to use")
+        print("/load [model_key] [optional_model_key]: choose what model to load")
+        print("/unload [model_key] [optional_model_key]: choose what model to unload")
+        print("/retry [message_id]: re-generate a message")
+        print("/new : starts a new chat")
+        print("/exit : unload all models and exits the app")
+        print("_"*window.columns)
     else:
         print(f"Unknown command:'{text[0]}'")
 
@@ -187,7 +197,7 @@ def chat(body):
             if item['type']== "message":
                 answer = item['content']
         print(answer)
-        print(f"{len(context)}~ {round(rawdata['stats']['dt'], 2)}s - {round(rawdata['stats']['tokens_per_second'],2)}tok/s")
+        print(f"[{len(context)}]~ {round(rawdata['stats']['dt'], 2)}s - {round(rawdata['stats']['tokens_per_second'],2)}tok/s")
         print("_"*window.columns)
         return response.status_code, rawdata
     else:
@@ -214,6 +224,7 @@ if status != 200:
     print(f"Failed to load model: {status}")
     exit(1)
 print(f"{currentmodel} loaded in {response['load_time_seconds']}s.")
+print("")
 
 previous_response_id = None
 context = []
