@@ -3,6 +3,7 @@ import time
 import shutil
 
 window = shutil.get_terminal_size()
+REQUEST_TIMEOUT_SECONDS = 15
 
 def get_models(server, model_type='llm'):
     accepted_model_type = ['llm','vlm','embedding','decision']
@@ -13,7 +14,10 @@ def get_models(server, model_type='llm'):
     else:
         return 22, None
         
-    response = requests.get(server+"/api/v1/models")
+    response = requests.get(
+        server+"/api/v1/models",
+        timeout=REQUEST_TIMEOUT_SECONDS
+    )
     models = []
     if response.status_code != 200:
         return response.status_code, None
@@ -28,7 +32,11 @@ def load(server, model_key):
     body = {
         "model": model_key
     }
-    response = requests.post(server+"/api/v1/models/load",json=body)
+    response = requests.post(
+        server+"/api/v1/models/load",
+        json=body,
+        timeout=REQUEST_TIMEOUT_SECONDS
+    )
     if response.status_code != 200:
         return response.status_code, None
     return response.status_code, response.json()
@@ -37,7 +45,11 @@ def unload(server, instance):
     body = {
         "instance_id": instance
     }
-    response = requests.post(server+"/api/v1/models/unload",json=body)
+    response = requests.post(
+        server+"/api/v1/models/unload",
+        json=body,
+        timeout=REQUEST_TIMEOUT_SECONDS
+    )
     if response.status_code == 200:
         return response.status_code, response.json()
     else:
